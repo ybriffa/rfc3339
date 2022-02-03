@@ -8,6 +8,13 @@ import (
 	"time"
 )
 
+const (
+	Minute = 60
+	Hour   = Minute * 60
+	Day    = Hour * 24
+	Week   = Day * 7
+)
+
 var (
 	rfc3339regexp = regexp.MustCompile(`^-?P(\d+Y)?(\d+M)?(\d+W)?(\d+D)?(T(\d+H)?(\d+M)?(\d+S)?)?$`)
 )
@@ -35,15 +42,20 @@ func computeDuration(v int64, thresholds []threshold) (string, int64) {
 	return result, v
 }
 
-// FormatDuration Format returns a textual representation of the time.Duration according to the RFC3339.
+// FormatDuration returns a textual representation of the time.Duration according to the RFC3339.
 func FormatDuration(d time.Duration) string {
+	return FormatSeconds(int64(d / time.Second))
+}
+
+// FormatSeconds returns a textual representation of the number of seconds according to the RFC3339.
+func FormatSeconds(seconds int64) string {
 	prefix := "P"
-	if d < 0 {
+	if seconds < 0 {
 		prefix = "-P"
-		d = -d
+		seconds = -seconds
 	}
 
-	timeResult, remaining := computeDuration(int64(d/time.Second), []threshold{{"S", 60}, {"M", 60}, {"H", 24}})
+	timeResult, remaining := computeDuration(seconds, []threshold{{"S", 60}, {"M", 60}, {"H", 24}})
 	if timeResult != "" {
 		timeResult = "T" + timeResult
 	}
@@ -64,6 +76,15 @@ func FormatDuration(d time.Duration) string {
 
 // ParseDuration parses a formatted string to a RFC3339 duration and returns the time duration it represents.
 func ParseDuration(s string) (time.Duration, error) {
+	seconds, err := ParseSeconds(s)
+	if err != nil {
+		return 0, err
+	}
+	return time.Duration(seconds) * time.Second, nil
+}
+
+// ParseSeconds parses a formatted string to a RFC3339 duration and returns the time duration it represents.
+func ParseSeconds(s string) (int64, error) {
 	if !rfc3339regexp.MatchString(s) {
 		return 0, fmt.Errorf("%s does not match RFC3339 duration", s)
 	}
@@ -88,11 +109,11 @@ func ParseDuration(s string) (time.Duration, error) {
 		return 0, fmt.Errorf("failed to parse time: %s", err)
 	}
 
-	return (durationResult + timeResult) * time.Duration(multiplier), nil
+	return (durationResult + timeResult) * int64(multiplier), nil
 }
 
-func parsePeriod(array []string) (time.Duration, error) {
-	var result time.Duration
+func parsePeriod(array []string) (int64, error) {
+	var result int64
 
 	for _, v := range array {
 		switch {
@@ -101,22 +122,22 @@ func parsePeriod(array []string) (time.Duration, error) {
 			if err != nil {
 				return 0, fmt.Errorf("failed to parse number of weeks: %s", err)
 			}
-			result += (time.Duration(i) * 7 * 24 * time.Hour)
+			result += (i * Week)
 
 		case strings.HasSuffix(v, "D"):
 			i, err := strconv.ParseInt(strings.TrimSuffix(v, "D"), 10, 64)
 			if err != nil {
 				return 0, fmt.Errorf("failed to parse number of days: %s", err)
 			}
-			result += (time.Duration(i) * 24 * time.Hour)
+			result += (i * Day)
 		}
 	}
 
 	return result, nil
 }
 
-func parseTime(array []string) (time.Duration, error) {
-	var result time.Duration
+func parseTime(array []string) (int64, error) {
+	var result int64
 
 	for _, v := range array {
 		switch {
@@ -125,22 +146,40 @@ func parseTime(array []string) (time.Duration, error) {
 			if err != nil {
 				return 0, fmt.Errorf("failed to parse number of hours: %s", err)
 			}
-			result += (time.Duration(i) * time.Hour)
+			result += (i * Hour)
 
 		case strings.HasSuffix(v, "M"):
 			i, err := strconv.ParseInt(strings.TrimSuffix(v, "M"), 10, 64)
 			if err != nil {
 				return 0, fmt.Errorf("failed to parse number of minutes: %s", err)
 			}
-			result += (time.Duration(i) * time.Minute)
+			result += (i * Minute)
 
 		case strings.HasSuffix(v, "S"):
 			i, err := strconv.ParseInt(strings.TrimSuffix(v, "S"), 10, 64)
 			if err != nil {
 				return 0, fmt.Errorf("failed to parse number of seconds: %s", err)
 			}
-			result += (time.Duration(i) * time.Second)
+			result += i
 		}
 	}
 	return result, nil
+}
+
+func ToStringDuration(s string) (string, error) {
+	seconds, err := ParseSeconds(s)
+	if err != nil {
+		return "", err
+	}
+
+	switch {
+	case seconds%(Minute) > 0:
+		return fmt.Sprintf("%ds", seconds), nil
+	case seconds%(Hour) > 0:
+		return fmt.Sprintf("%dm", seconds/Minute), nil
+	case seconds%(Day) > 0:
+		return fmt.Sprintf("%dh", seconds/Hour), nil
+	}
+
+	return fmt.Sprintf("%dd", seconds/Day), nil
 }

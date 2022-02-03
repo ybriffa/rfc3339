@@ -86,3 +86,25 @@ func TestParseDuration(t *testing.T) {
 		require.Equal(t, test.expected, result)
 	}
 }
+
+func TestToStringDuration(t *testing.T) {
+	for _, test := range []struct {
+		expected      string
+		value         string
+		errorExpected bool
+	}{
+		// 0
+		{
+			value:    "PT1H30M",
+			expected: "90m",
+		},
+	} {
+		result, err := ToStringDuration(test.value)
+		if test.errorExpected {
+			require.Error(t, err)
+		} else {
+			require.NoError(t, err)
+		}
+		require.Equal(t, test.expected, result)
+	}
+}
